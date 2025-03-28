@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Range;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -86,7 +85,6 @@ public class UserQueueService {
         .map(rank -> rank >= 0 ? rank + 1 : rank);
   }
 
-  @Scheduled(fixedRate = 10000, initialDelay = 500)
   public void scheduleAllowUser() {
     removeInactiveUsers()
         .then(allowUserTask())
