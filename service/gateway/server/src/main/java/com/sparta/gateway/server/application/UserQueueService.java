@@ -34,11 +34,38 @@ public class UserQueueService {
 
   public Mono<RegisterUserResponse> registerUser(String userId) {
     return reactiveRedisTemplate.opsForZSet()
-        .add(USER_QUEUE_WAIT_KEY, userId, getCurrentTime())
-        .flatMap(success ->
-            reactiveRedisTemplate.opsForZSet().rank(USER_QUEUE_WAIT_KEY, userId)
-        )
-        .map(rank -> new RegisterUserResponse(rank + 1));
+        .rank(USER_QUEUE_ACTIVE_KEY, userId)
+        .flatMap(activeRank -> {
+          if (activeRank != null) {
+            return Mono.just(new RegisterUserResponse(activeRank + 1));
+          }
+
+          return reactiveRedisTemplate.opsForZSet()
+              .rank(USER_QUEUE_WAIT_KEY, userId)
+              .flatMap(waitRank -> {
+                if (waitRank != null) {
+                  return Mono.just(new RegisterUserResponse(waitRank + 1));
+                }
+
+                // 새 유저 처리
+                return reactiveRedisTemplate.opsForZSet()
+                    .size(USER_QUEUE_ACTIVE_KEY)
+                    .flatMap(activeUsers -> {
+                      if (activeUsers < MAX_ACTIVE_USERS) {
+                        return reactiveRedisTemplate.opsForZSet()
+                            .add(USER_QUEUE_ACTIVE_KEY, userId, getCurrentTime())
+                            .thenReturn(new RegisterUserResponse(activeUsers + 1));
+                      }
+
+                      return reactiveRedisTemplate.opsForZSet()
+                          .add(USER_QUEUE_WAIT_KEY, userId, getCurrentTime())
+                          .flatMap(added ->
+                              reactiveRedisTemplate.opsForZSet().rank(USER_QUEUE_WAIT_KEY, userId)
+                          )
+                          .map(rank -> new RegisterUserResponse(rank + 1));
+                    });
+              });
+        });
   }
 
   public Mono<Boolean> isAllowed(String userId) {
