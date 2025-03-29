@@ -1,20 +1,11 @@
 package com.sparta.gateway.server.infrastructure.filter;
 
-import static com.sparta.common.domain.jwt.JwtGlobalConstant.X_USER_CLAIMS;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sparta.auth.auth_dto.jwt.JwtClaim;
-import com.sparta.gateway.server.application.UserQueueService;
-import com.sparta.gateway.server.infrastructure.exception.GatewayErrorCode;
-import com.sparta.gateway.server.infrastructure.exception.GatewayException;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
+import com.sparta.gateway.server.application.QueueRequestProcessor;
+import com.sparta.gateway.server.application.UserExtractor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -23,12 +14,14 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class GlobalQueueFilter implements GlobalFilter, Ordered {
 
-  private final UserQueueService userQueueService;
-  private final ObjectMapper objectMapper;
+  private final UserExtractor userExtractor;
+  private final QueueRequestProcessor queueRequestProcessor;
 
-  public GlobalQueueFilter(UserQueueService userQueueService, ObjectMapper objectMapper) {
-    this.userQueueService = userQueueService;
-    this.objectMapper = objectMapper;
+  public GlobalQueueFilter(UserExtractor userExtractor,
+      QueueRequestProcessor queueRequestProcessor) {
+
+    this.userExtractor = userExtractor;
+    this.queueRequestProcessor = queueRequestProcessor;
   }
 
   @Override
@@ -40,8 +33,8 @@ public class GlobalQueueFilter implements GlobalFilter, Ordered {
       return chain.filter(exchange);
     }
 
-    return extractUserId(exchange)
-        .flatMap(userId -> processRequest(exchange, chain, userId));
+    return userExtractor.extractUserId(exchange)
+        .flatMap(userId -> queueRequestProcessor.processRequest(exchange, chain, userId));
   }
 
   private boolean isPublicPath(String path) {
@@ -51,40 +44,6 @@ public class GlobalQueueFilter implements GlobalFilter, Ordered {
         || path.startsWith("/api/products/search")
         || path.startsWith("/api/preorder/search")
         || path.startsWith("/api/categories/search");
-  }
-
-  private Mono<String> extractUserId(ServerWebExchange exchange) {
-    String encodedClaims = exchange.getRequest().getHeaders().getFirst(X_USER_CLAIMS);
-    if (encodedClaims == null) {
-      return Mono.error(new GatewayException(GatewayErrorCode.UNAUTHORIZED));
-    }
-    String decodedClaims = URLDecoder.decode(encodedClaims, StandardCharsets.UTF_8);
-    try {
-      JwtClaim claims = objectMapper.readValue(decodedClaims, JwtClaim.class);
-      return Mono.just(claims.getUserId().toString());
-    } catch (JsonProcessingException e) {
-      return Mono.error(new GatewayException(GatewayErrorCode.BAD_REQUEST));
-    }
-  }
-
-  private Mono<Void> processRequest(ServerWebExchange exchange, GatewayFilterChain chain,
-      String userId) {
-    return userQueueService.isAllowed(userId)
-        .flatMap(allowed -> {
-          if (allowed) {
-            return chain.filter(exchange);
-          }
-          return userQueueService.registerUser(userId)
-              .flatMap(response -> {
-                if (response.getRank() == 0) {
-                  return chain.filter(exchange);
-                }
-                var responseHeaders = exchange.getResponse().getHeaders();
-                responseHeaders.add("X-Queue-Rank", String.valueOf(response.getRank()));
-                exchange.getResponse().setStatusCode(HttpStatus.OK);
-                return exchange.getResponse().setComplete();
-              });
-        });
   }
 
   @Override
