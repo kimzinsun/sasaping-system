@@ -43,7 +43,8 @@ public class UserQueueRepository {
   public Mono<Boolean> isUserInActiveQueue(String userId) {
     return reactiveRedisTemplate.opsForZSet()
         .rank(USER_QUEUE_ACTIVE_KEY, userId)
-        .map(Objects::nonNull);
+        .map(rank -> true)
+        .defaultIfEmpty(false);
   }
 
   public Mono<Long> countActiveUsers() {

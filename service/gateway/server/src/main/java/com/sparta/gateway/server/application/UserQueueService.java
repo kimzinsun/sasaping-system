@@ -19,16 +19,14 @@ public class UserQueueService {
 
   public Mono<RegisterUserResponse> registerUser(String userId) {
     return userQueueRepository.findActiveUserRank(userId)
-        .flatMap(activeRank -> activeRank != null
-            ? Mono.just(new RegisterUserResponse(activeRank + 1))
-            : handleNewUserRegistration(userId));
+        .flatMap(rank -> Mono.just(new RegisterUserResponse(rank + 1)))
+        .switchIfEmpty(handleNewUserRegistration(userId));
   }
 
   private Mono<RegisterUserResponse> handleNewUserRegistration(String userId) {
     return userQueueRepository.findWaitingUserRank(userId)
-        .flatMap(waitRank -> waitRank != null
-            ? Mono.just(new RegisterUserResponse(waitRank + 1))
-            : processUserEntryToQueue(userId));
+        .flatMap(waitRank -> Mono.just(new RegisterUserResponse(waitRank + 1)))
+        .switchIfEmpty(processUserEntryToQueue(userId));
   }
 
   private Mono<RegisterUserResponse> processUserEntryToQueue(String userId) {

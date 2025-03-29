@@ -1,9 +1,7 @@
 package com.sparta.gateway.server.infrastructure.filter;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparta.gateway.server.application.QueueRequestProcessor;
 import com.sparta.gateway.server.application.UserExtractor;
-import com.sparta.gateway.server.application.UserQueueService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -19,8 +17,8 @@ public class GlobalQueueFilter implements GlobalFilter, Ordered {
   private final UserExtractor userExtractor;
   private final QueueRequestProcessor queueRequestProcessor;
 
-  public GlobalQueueFilter(UserQueueService userQueueService, ObjectMapper objectMapper,
-      UserExtractor userExtractor, QueueRequestProcessor queueRequestProcessor) {
+  public GlobalQueueFilter(UserExtractor userExtractor,
+      QueueRequestProcessor queueRequestProcessor) {
 
     this.userExtractor = userExtractor;
     this.queueRequestProcessor = queueRequestProcessor;
